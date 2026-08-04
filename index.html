@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>リンクライク衣装ビューア</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <h1 class="site-title">リンクライク衣装ビューア</h1>
+      <p class="site-desc">キャラクター・衣装名等で画像を検索</p>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="search-section">
+      <div class="search-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input
+          type="search"
+          id="search-input"
+          class="search-input"
+          placeholder="衣装名・キャラ名等で検索...（例: 花帆、UR、夏限定）"
+          autocomplete="off"
+          spellcheck="false"
+        >
+        <button class="search-clear hidden" id="search-clear" aria-label="クリア">&times;</button>
+      </div>
+      <div id="result-count" class="result-count hidden"></div>
+    </div>
+
+    <div id="state-empty" class="state state-empty">
+      <p class="state-text">キャラクター名や衣装名等を入力して検索してください。</p>
+      <div class="hint-tags">
+        <button class="hint-tag" data-query="UR">UR</button>
+        <button class="hint-tag" data-query="LR">LR</button>
+        <button class="hint-tag" data-query="DR">DR</button>
+        <button class="hint-tag" data-query="誕限定">誕限定</button>
+        <button class="hint-tag" data-query="夏限定">夏限定</button>
+        <button class="hint-tag" data-query="卒限定">卒限定</button>
+        <button class="hint-tag" data-query="恒常">恒常</button>
+      </div>
+    </div>
+
+    <div id="state-loading" class="state state-loading hidden">
+      <div class="spinner"></div>
+      <p class="state-text">データを読み込み中...</p>
+    </div>
+
+    <div id="state-error" class="state state-error hidden">
+      <p class="state-text">データの読み込みに失敗しました。</p>
+    </div>
+
+    <div id="state-no-results" class="state state-no-results hidden">
+      <p class="state-text">「<span id="no-results-query"></span>」に一致する衣装は見つかりませんでした。</p>
+    </div>
+
+    <div id="results-grid" class="results-grid hidden"></div>
+  </main>
+
+  <!-- 衣装詳細モーダル -->
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-costume-name">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal-panel">
+      <button class="modal-close" id="modal-close" aria-label="閉じる">&times;</button>
+      <div class="modal-header">
+        <p id="modal-character-name" class="modal-character-name"></p>
+        <h2 id="modal-costume-name" class="modal-costume-name"></h2>
+        <div id="modal-tags" class="modal-tags"></div>
+      </div>
+      <div id="modal-images" class="modal-images">
+        <div class="image-loading">
+          <div class="spinner"></div>
+          <p>画像を読み込み中...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/fuse.js@7.0.0/dist/fuse.min.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
