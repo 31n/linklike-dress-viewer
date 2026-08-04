@@ -69,7 +69,7 @@ function showState(id) {
 async function init() {
   showState('state-loading');
   try {
-    const res = await fetch(`${API_BASE}/search-index.json`);
+    const res = await fetch(`${API_BASE}/search-index.json`, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const allEntries = await res.json();
 
