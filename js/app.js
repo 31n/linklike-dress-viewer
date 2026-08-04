@@ -1,8 +1,7 @@
 /* eslint-disable no-undef */
 'use strict';
 
-const API_BASE   = 'https://31n.github.io/linklike-dress-api/api/v1';
-const IMAGE_BASE = 'https://31n.github.io/linklike-dress-api/images/characters';
+const API_BASE = 'https://31n.github.io/linklike-dress-api/api/v1';
 
 /** 4方向の定義 */
 const DIRECTIONS = [
@@ -15,9 +14,25 @@ const DIRECTIONS = [
 /** レアリティタグに対応するCSSクラス */
 const RARITY_TAGS = new Set(['DR', 'LR', 'UR', 'mUR', 'SR', 'mSR', 'R', 'BR']);
 
-/** 画像 URL を生成する */
-function imageUrl(slug, costumeId, direction) {
-  return `${IMAGE_BASE}/${slug}/costumes/${costumeId}/${direction}.png`;
+/** costumeId → images.json フェッチ結果(Promise) のキャッシュ */
+const imagesCache = new Map();
+
+/**
+ * /api/v1/costumes/{costumeId}/images.json を取得する（結果はキャッシュ）。
+ * レスポンス例: { costumeId, characterSlug, images: { front_left, front_right, back_left, back_right } }
+ */
+function fetchCostumeImages(costumeId) {
+  if (imagesCache.has(costumeId)) return imagesCache.get(costumeId);
+
+  const promise = fetch(`${API_BASE}/costumes/${costumeId}/images.json`)
+    .then(res => {
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    })
+    .then(data => data.images || {});
+
+  imagesCache.set(costumeId, promise);
+  return promise;
 }
 
 // ===== DOM 参照 =====
@@ -132,11 +147,44 @@ function runSearch(q) {
 }
 
 // ===== 結果レンダリング =====
+/** サムネイル遅延読み込み用の IntersectionObserver（検索のたびに張り直す） */
+let thumbObserver = null;
+
 function renderResults(costumes) {
   resultsGrid.innerHTML = '';
+  if (thumbObserver) thumbObserver.disconnect();
+  thumbObserver = new IntersectionObserver(onThumbIntersect, { rootMargin: '200px' });
+
   const fragment = document.createDocumentFragment();
   costumes.forEach(c => fragment.appendChild(createCard(c)));
   resultsGrid.appendChild(fragment);
+}
+
+function onThumbIntersect(entries, observer) {
+  entries.forEach(entry => {
+    if (!entry.isIntersecting) return;
+    const thumb = entry.target;
+    observer.unobserve(thumb);
+    loadThumbImage(thumb, Number(thumb.dataset.costumeId));
+  });
+}
+
+function loadThumbImage(thumb, costumeId) {
+  fetchCostumeImages(costumeId)
+    .then(images => {
+      const url = images.front_left;
+      if (!url) throw new Error('front_left not found');
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.alt = thumb.dataset.alt || '';
+      img.onerror = () => { thumb.innerHTML = '<span class="no-image">No Image</span>'; };
+      img.src = url;
+      thumb.innerHTML = '';
+      thumb.appendChild(img);
+    })
+    .catch(() => {
+      thumb.innerHTML = '<span class="no-image">No Image</span>';
+    });
 }
 
 function createCard(costume) {
@@ -146,17 +194,12 @@ function createCard(costume) {
   card.setAttribute('role', 'button');
   card.setAttribute('aria-label', `${costume.characterName}の衣装: ${costume.name}`);
 
-  // サムネイル（front_left）
+  // サムネイル（front_left、ビューポートに入ってから images.json を取得）
   const thumb = document.createElement('div');
   thumb.className = 'card-thumb';
-  const img = document.createElement('img');
-  img.loading = 'lazy';
-  img.alt = `${costume.name} - front_left`;
-  img.src = imageUrl(costume.characterSlug, costume.costumeId, 'front_left');
-  img.onerror = function () {
-    this.parentElement.innerHTML = '<span class="no-image">No Image</span>';
-  };
-  thumb.appendChild(img);
+  thumb.dataset.costumeId = costume.costumeId;
+  thumb.dataset.alt = `${costume.name} - front_left`;
+  thumbObserver.observe(thumb);
 
   // 情報エリア
   const body = document.createElement('div');
@@ -222,44 +265,52 @@ function openModal(costume) {
 }
 
 function loadModalImages(costume) {
-  const { characterSlug, costumeId } = costume;
-  const items = [];
-  let pending = DIRECTIONS.length;
+  const { costumeId } = costume;
 
-  DIRECTIONS.forEach((dir, idx) => {
+  fetchCostumeImages(costumeId)
+    .then(images => renderModalImages(costume, images))
+    .catch(() => renderModalImages(costume, {}));
+}
+
+function renderModalImages(costume, images) {
+  // モーダルが閉じられた後や別の衣装に切り替わった後の反映を防ぐ
+  if (!activeCostume || activeCostume.costumeId !== costume.costumeId) return;
+
+  const items = [];
+
+  DIRECTIONS.forEach(dir => {
     const item = document.createElement('div');
     item.className = 'image-item';
-    items[idx] = item;
-
-    const imgEl = document.createElement('img');
-    imgEl.alt = `${costume.name} - ${dir.label}`;
-    imgEl.loading = 'lazy';
 
     const label = document.createElement('p');
     label.className = 'image-label';
     label.textContent = dir.label;
 
-    imgEl.onerror = function () {
+    const url = images[dir.key];
+    if (url) {
+      const imgEl = document.createElement('img');
+      imgEl.alt = `${costume.name} - ${dir.label}`;
+      imgEl.loading = 'lazy';
+      imgEl.onerror = function () {
+        const placeholder = document.createElement('div');
+        placeholder.className = 'img-error';
+        placeholder.textContent = '画像なし';
+        this.replaceWith(placeholder);
+      };
+      imgEl.src = url;
+      item.append(imgEl, label);
+    } else {
       const placeholder = document.createElement('div');
       placeholder.className = 'img-error';
       placeholder.textContent = '画像なし';
-      this.replaceWith(placeholder);
-      tryFinish();
-    };
-    imgEl.onload = tryFinish;
+      item.append(placeholder, label);
+    }
 
-    item.append(imgEl, label);
-    // src を設定するのは append 後にする（FireFox の onload 即時発火を防ぐ）
-    imgEl.src = imageUrl(characterSlug, costumeId, dir.key);
+    items.push(item);
   });
 
-  function tryFinish() {
-    pending--;
-    if (pending <= 0) {
-      modalImages.innerHTML = '';
-      items.forEach(item => modalImages.appendChild(item));
-    }
-  }
+  modalImages.innerHTML = '';
+  items.forEach(item => modalImages.appendChild(item));
 }
 
 function closeModal() {
